@@ -12,5 +12,16 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --locked --no-install-project --no-dev
 
-# Copy the application code
+# Set working directory
+WORKDIR /app
+
+# Copy the application code and project config
 COPY ./bot.py bot.py
+COPY ./pyproject.toml pyproject.toml
+
+# Expose the port the bot runs on (default 7860, Render will override with PORT env var)
+EXPOSE 7860
+
+# Run the bot using uv
+# The bot.py will automatically use PORT env var if provided by Render
+CMD ["uv", "run", "bot.py", "--host", "0.0.0.0", "--port", "7860"]

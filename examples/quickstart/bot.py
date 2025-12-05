@@ -146,6 +146,13 @@ async def bot(runner_args: RunnerArguments):
 
 
 if __name__ == "__main__":
+    import sys
     from pipecat.runner.run import main
-
+    
+    # Support Render's PORT environment variable
+    # Render provides PORT dynamically, but we default to 7860 for local development
+    if "PORT" in os.environ and "--port" not in sys.argv:
+        port = os.environ.get("PORT", "7860")
+        sys.argv.extend(["--port", port])
+    
     main()
