@@ -6,12 +6,12 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     libgl1 \
-    libgl1-mesa-glx \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender-dev \
     libgomp1 \
+    libegl1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv - download and extract, find binary regardless of directory structure
