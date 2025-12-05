@@ -28,24 +28,31 @@ logger.add(sys.stderr, level=os.getenv("LOG_LEVEL", "INFO"))
 # Import agent after environment is loaded
 from agent import VoiceAgent
 
-# LiveKit configuration
+# LiveKit configuration (check but don't exit - allow server to start for health checks)
 LIVEKIT_URL = os.getenv("LIVEKIT_URL")
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY")
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET")
 
-if not all([LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET]):
-    logger.error(
-        "Missing required LiveKit environment variables: "
-        "LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET"
+LIVEKIT_CONFIGURED = bool(LIVEKIT_URL and LIVEKIT_API_KEY and LIVEKIT_API_SECRET)
+
+if not LIVEKIT_CONFIGURED:
+    logger.warning(
+        "⚠️  Missing LiveKit environment variables: "
+        "LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET. "
+        "Server will start but agent endpoints will not work until configured."
     )
-    sys.exit(1)
+else:
+    logger.info("✅ LiveKit configuration found")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifespan."""
     logger.info("🚀 Starting LiveKit AgentServer...")
-    logger.info(f"LiveKit URL: {LIVEKIT_URL}")
+    if LIVEKIT_CONFIGURED:
+        logger.info(f"LiveKit URL: {LIVEKIT_URL}")
+    else:
+        logger.warning("⚠️  LiveKit not configured - agent endpoints will be unavailable")
     yield
     logger.info("🛑 Shutting down LiveKit AgentServer...")
 
@@ -74,7 +81,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "pipecat-livekit-agent",
-        "livekit_configured": bool(LIVEKIT_URL and LIVEKIT_API_KEY and LIVEKIT_API_SECRET),
+        "livekit_configured": LIVEKIT_CONFIGURED,
     }
 
 
@@ -87,6 +94,12 @@ async def agent_endpoint(request: Request, background_tasks: BackgroundTasks):
     The agent connects via WebSocket to LiveKit Cloud (no UDP required).
     All WebRTC is handled by LiveKit Cloud infrastructure.
     """
+    if not LIVEKIT_CONFIGURED:
+        raise HTTPException(
+            status_code=503,
+            detail="LiveKit not configured. Please set LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET environment variables."
+        )
+    
     try:
         # Get the request body
         body = await request.json()
@@ -133,6 +146,12 @@ async def offer_endpoint(request: Request):
     Note: With LiveKit, WebRTC signaling is handled by LiveKit Cloud.
     This endpoint is kept for compatibility but redirects to LiveKit.
     """
+    if not LIVEKIT_CONFIGURED:
+        raise HTTPException(
+            status_code=503,
+            detail="LiveKit not configured. Please set LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET environment variables."
+        )
+    
     try:
         body = await request.json()
         logger.info(f"Received offer request: {body}")
@@ -165,12 +184,16 @@ if __name__ == "__main__":
     import uvicorn
     
     # Get port from environment (Render provides this)
-    port = int(os.getenv("PORT", 7860))
+    # Render automatically sets PORT, but we default to 7860 for local dev
+    port = int(os.getenv("PORT", "7860"))
     host = os.getenv("HOST", "0.0.0.0")
     
-    logger.info(f"Starting server on {host}:{port}")
+    logger.info(f"🚀 Starting server on {host}:{port}")
+    logger.info(f"📡 Health check available at http://{host}:{port}/health")
+    
+    # Use uvicorn.run with app object directly for better port binding
     uvicorn.run(
-        "main:app",
+        app,  # Pass app object directly instead of string
         host=host,
         port=port,
         log_level="info",
