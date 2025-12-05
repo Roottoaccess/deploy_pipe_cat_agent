@@ -7,10 +7,13 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv - download standalone binary for Linux x86_64
-RUN curl -LsSf https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz | tar -xz \
-    && mv uv /usr/local/bin/uv \
-    && chmod +x /usr/local/bin/uv
+# Install uv - download and extract to temp directory, then move binary
+RUN mkdir -p /tmp/uv-install \
+    && curl -LsSf https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz -o /tmp/uv.tar.gz \
+    && tar -xzf /tmp/uv.tar.gz -C /tmp/uv-install \
+    && find /tmp/uv-install -name "uv" -type f -executable -exec mv {} /usr/local/bin/uv \; \
+    && chmod +x /usr/local/bin/uv \
+    && rm -rf /tmp/uv-install /tmp/uv.tar.gz
 
 # Enable bytecode compilation
 ENV UV_COMPILE_BYTECODE=1
