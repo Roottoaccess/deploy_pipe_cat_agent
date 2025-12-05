@@ -1,11 +1,13 @@
 [project]
 name = "pipecat-quickstart"
 version = "0.1.0"
-description = "Quickstart example for building voice AI bots with Pipecat"
+description = "Quickstart example for building voice AI bots with Pipecat using LiveKit"
 requires-python = ">=3.10"
 dependencies = [
-    "pipecat-ai[webrtc,daily,silero,deepgram,openai,cartesia,local-smart-turn-v3,runner]",
-    "pipecat-ai-cli"
+    "pipecat-ai[livekit,silero,deepgram,openai,cartesia,local-smart-turn-v3]",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "python-dotenv>=1.0.0",
 ]
 
 [dependency-groups]

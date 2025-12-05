@@ -1,17 +1,10 @@
 # Use Python 3.11 slim image (compatible with Render's platform)
 FROM python:3.11-slim
 
-# Install system dependencies
+# Install system dependencies (minimal - no OpenGL needed for LiveKit)
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
-    libgl1 \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libgomp1 \
-    libegl1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv - download and extract, find binary regardless of directory structure
@@ -37,14 +30,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Set working directory
 WORKDIR /app
 
-# Copy the application code and project config
-COPY ./bot.py bot.py
+# Copy the application code
+COPY ./main.py main.py
+COPY ./agent.py agent.py
 COPY ./pyproject.toml pyproject.toml
 
-# Expose the port the bot runs on (default 7860, Render will override with PORT env var)
+# Expose the port the server runs on (default 7860, Render will override with PORT env var)
 EXPOSE 7860
 
-# Run the bot using uv
-# Explicitly use Render's PORT environment variable (defaults to 7860 if not set)
+# Run the FastAPI server using Python directly
 # Use shell form to ensure environment variables are passed through
-CMD sh -c 'uv run bot.py --host 0.0.0.0 --port ${PORT:-7860}'
+CMD sh -c 'python main.py'
