@@ -105,6 +105,15 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         observers=[RTVIObserver(rtvi)],
     )
 
+    # Support both LiveKit and other transport event names
+    @transport.event_handler("on_first_participant_joined")
+    async def on_first_participant_joined(transport, participant_id):
+        logger.info(f"First participant joined: {participant_id}")
+        # Kick off the conversation.
+        messages.append({"role": "system", "content": "Say hello and briefly introduce yourself."})
+        await task.queue_frames([LLMRunFrame()])
+
+    # Also support on_client_connected for backward compatibility
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
         logger.info(f"Client connected")
@@ -112,6 +121,12 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         messages.append({"role": "system", "content": "Say hello and briefly introduce yourself."})
         await task.queue_frames([LLMRunFrame()])
 
+    @transport.event_handler("on_participant_disconnected")
+    async def on_participant_disconnected(transport, participant_id):
+        logger.info(f"Participant disconnected: {participant_id}")
+        await task.cancel()
+
+    # Also support on_client_disconnected for backward compatibility
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
         logger.info(f"Client disconnected")

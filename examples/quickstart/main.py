@@ -144,12 +144,52 @@ async def client():
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for Render."""
-    return {
+    """Health check endpoint for Render with detailed status."""
+    health_status = {
         "status": "healthy",
         "service": "pipecat-livekit-agent",
         "livekit_configured": LIVEKIT_CONFIGURED,
     }
+    
+    # Test LiveKit token generation if configured
+    if LIVEKIT_CONFIGURED:
+        try:
+            from pipecat.runner.livekit import generate_token_with_agent
+            test_token = generate_token_with_agent(
+                "health-check-room",
+                "health-check-agent",
+                LIVEKIT_API_KEY,
+                LIVEKIT_API_SECRET,
+            )
+            if test_token and len(test_token) > 20:
+                health_status["livekit_token_generation"] = "working"
+            else:
+                health_status["livekit_token_generation"] = "failed"
+        except Exception as e:
+            health_status["livekit_token_generation"] = f"error: {str(e)}"
+    
+    # Check AI service API keys
+    health_status["ai_services"] = {
+        "deepgram": bool(os.getenv("DEEPGRAM_API_KEY")),
+        "openai": bool(os.getenv("OPENAI_API_KEY")),
+        "cartesia": bool(os.getenv("CARTESIA_API_KEY")),
+    }
+    
+    # Check if bot.py can be imported
+    try:
+        from bot import run_bot
+        health_status["bot_py"] = "available"
+    except Exception as e:
+        health_status["bot_py"] = f"error: {str(e)}"
+    
+    # Check if agent.py can be imported
+    try:
+        from agent import VoiceAgent
+        health_status["agent_py"] = "available"
+    except Exception as e:
+        health_status["agent_py"] = f"error: {str(e)}"
+    
+    return health_status
 
 
 @app.post("/agent")

@@ -1,11 +1,10 @@
 """
-LiveKit Voice Agent using Pipecat services.
+LiveKit Voice Agent using bot.py.
 
-This agent connects to LiveKit Cloud via WebSocket and uses Pipecat
-for STT, LLM, and TTS processing.
+This agent connects to LiveKit Cloud and uses bot.py's run_bot function
+for all the bot logic (STT, LLM, TTS processing).
 """
 
-import asyncio
 import os
 from typing import Optional
 
@@ -14,18 +13,12 @@ from loguru import logger
 from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
-from pipecat.frames.frames import LLMRunFrame
-from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.runner import PipelineRunner
-from pipecat.pipeline.task import PipelineParams, PipelineTask
-from pipecat.processors.aggregators.llm_context import LLMContext
-from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
-from pipecat.processors.frameworks.rtvi import RTVIConfig, RTVIObserver, RTVIProcessor
-from pipecat.services.cartesia.tts import CartesiaTTSService
-from pipecat.services.deepgram.stt import DeepgramSTTService
-from pipecat.services.openai.llm import OpenAILLMService
-from pipecat.transports.livekit.transport import LiveKitParams, LiveKitTransport
 from pipecat.runner.livekit import generate_token_with_agent
+from pipecat.runner.types import RunnerArguments
+from pipecat.transports.livekit.transport import LiveKitParams, LiveKitTransport
+
+# Import bot.py's run_bot function
+from bot import run_bot
 
 # LiveKit configuration
 LIVEKIT_URL = os.getenv("LIVEKIT_URL")
@@ -33,8 +26,15 @@ LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY")
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET")
 
 
+class SimpleRunnerArguments:
+    """Simple RunnerArguments-like object for bot.py compatibility."""
+    
+    def __init__(self):
+        self.handle_sigint = False
+
+
 class VoiceAgent:
-    """Voice AI agent that connects to LiveKit rooms."""
+    """Voice AI agent that connects to LiveKit rooms and uses bot.py."""
 
     def __init__(
         self,
@@ -50,13 +50,12 @@ class VoiceAgent:
         self.room_name = room_name
         self.participant_identity = participant_identity
         self.transport: Optional[LiveKitTransport] = None
-        self.task: Optional[PipelineTask] = None
-        self.runner: Optional[PipelineRunner] = None
+        self.runner_args: Optional[RunnerArguments] = None
 
     async def start(self):
-        """Start the agent and connect to LiveKit room."""
+        """Start the agent and connect to LiveKit room using bot.py."""
         try:
-            logger.info(f"Starting agent for room: {self.room_name}")
+            logger.info(f"Starting agent for room: {self.room_name} using bot.py")
 
             # Generate LiveKit token
             token = generate_token_with_agent(
@@ -79,73 +78,12 @@ class VoiceAgent:
                 ),
             )
 
-            # Initialize services
-            stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"))
-            llm = OpenAILLMService(api_key=os.getenv("OPENAI_API_KEY"))
-            tts = CartesiaTTSService(
-                api_key=os.getenv("CARTESIA_API_KEY"),
-                voice_id="71a7ad14-091c-4e8e-a314-022ece01c121",  # British Reading Lady
-            )
+            # Create runner arguments for bot.py
+            self.runner_args = SimpleRunnerArguments()
 
-            # Set up conversation context
-            messages = [
-                {
-                    "role": "system",
-                    "content": "You are a friendly AI assistant. Respond naturally and keep your answers conversational.",
-                },
-            ]
-
-            context = LLMContext(messages)
-            context_aggregator = LLMContextAggregatorPair(context)
-
-            # Add RTVI processor (from bot.py)
-            rtvi = RTVIProcessor(config=RTVIConfig(config=[]))
-
-            # Create pipeline (matching bot.py structure)
-            pipeline = Pipeline(
-                [
-                    self.transport.input(),  # Transport user input
-                    rtvi,  # RTVI processor
-                    stt,  # Speech-to-text
-                    context_aggregator.user(),  # User responses
-                    llm,  # LLM
-                    tts,  # Text-to-speech
-                    self.transport.output(),  # Transport bot output
-                    context_aggregator.assistant(),  # Assistant spoken responses
-                ]
-            )
-
-            # Create task (matching bot.py structure)
-            self.task = PipelineTask(
-                pipeline,
-                params=PipelineParams(
-                    enable_metrics=True,
-                    enable_usage_metrics=True,
-                ),
-                observers=[RTVIObserver(rtvi)],
-            )
-
-            # Set up event handlers
-            @self.transport.event_handler("on_first_participant_joined")
-            async def on_first_participant_joined(transport, participant_id):
-                logger.info(f"First participant joined: {participant_id}")
-                # Kick off the conversation
-                messages.append(
-                    {"role": "system", "content": "Say hello and briefly introduce yourself."}
-                )
-                await self.task.queue_frames([LLMRunFrame()])
-
-            @self.transport.event_handler("on_participant_disconnected")
-            async def on_participant_disconnected(transport, participant_id):
-                logger.info(f"Participant disconnected: {participant_id}")
-                await self.task.cancel()
-
-            # Create runner
-            self.runner = PipelineRunner()
-
-            # Start the pipeline
-            logger.info("Starting pipeline...")
-            await self.runner.run(self.task)
+            # Use bot.py's run_bot function with LiveKit transport
+            logger.info("Calling bot.py's run_bot function...")
+            await run_bot(self.transport, self.runner_args)
 
         except Exception as e:
             logger.error(f"Error starting agent: {e}", exc_info=True)
@@ -155,8 +93,6 @@ class VoiceAgent:
         """Stop the agent and disconnect from LiveKit room."""
         try:
             logger.info("Stopping agent...")
-            if self.task:
-                await self.task.cancel()
             if self.transport:
                 await self.transport.output().stop()
             logger.info("Agent stopped")
@@ -165,7 +101,7 @@ class VoiceAgent:
 
 
 async def run_agent(room_name: str, participant_identity: str = "agent"):
-    """Run a voice agent in a LiveKit room.
+    """Run a voice agent in a LiveKit room using bot.py.
 
     Args:
         room_name: Name of the LiveKit room to join.
@@ -182,8 +118,8 @@ async def run_agent(room_name: str, participant_identity: str = "agent"):
 
 if __name__ == "__main__":
     # For testing: run agent directly
+    import asyncio
     import sys
 
     room_name = sys.argv[1] if len(sys.argv) > 1 else "test-room"
     asyncio.run(run_agent(room_name))
-
