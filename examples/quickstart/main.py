@@ -75,6 +75,13 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+async def root():
+    """Root endpoint - redirects to health check."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/health")
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint for Render."""
