@@ -268,7 +268,25 @@ def _setup_webrtc_routes(
             runner_args = SmallWebRTCRunnerArguments(
                 webrtc_connection=connection, body=request.request_data
             )
-            background_tasks.add_task(bot_module.bot, runner_args)
+            
+            async def run_bot_with_error_handling():
+                """Run bot function with proper error handling and logging."""
+                try:
+                    logger.info(f"Starting bot for connection {connection.pc_id}")
+                    await bot_module.bot(runner_args)
+                    logger.info(f"Bot completed for connection {connection.pc_id}")
+                except Exception as e:
+                    logger.error(
+                        f"Bot function failed for connection {connection.pc_id}: {e}",
+                        exc_info=True
+                    )
+                    # Try to close the connection if bot fails
+                    try:
+                        await connection.close()
+                    except Exception as close_error:
+                        logger.error(f"Error closing connection after bot failure: {close_error}")
+            
+            background_tasks.add_task(run_bot_with_error_handling)
 
         # Delegate handling to SmallWebRTCRequestHandler
         answer = await small_webrtc_handler.handle_web_request(
