@@ -7,13 +7,13 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv - download and extract to temp directory, then move binary
-RUN mkdir -p /tmp/uv-install \
-    && curl -LsSf https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz -o /tmp/uv.tar.gz \
-    && tar -xzf /tmp/uv.tar.gz -C /tmp/uv-install \
-    && find /tmp/uv-install -name "uv" -type f -executable -exec mv {} /usr/local/bin/uv \; \
-    && chmod +x /usr/local/bin/uv \
-    && rm -rf /tmp/uv-install /tmp/uv.tar.gz
+# Install uv - download and extract, find binary regardless of directory structure
+RUN cd /tmp && \
+    curl -LsSf https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz -o uv.tar.gz && \
+    tar -xzf uv.tar.gz && \
+    find . -name "uv" -type f -executable -exec mv {} /usr/local/bin/uv \; && \
+    chmod +x /usr/local/bin/uv && \
+    rm -rf /tmp/uv* /tmp/*.tar.gz
 
 # Enable bytecode compilation
 ENV UV_COMPILE_BYTECODE=1
@@ -38,5 +38,6 @@ COPY ./pyproject.toml pyproject.toml
 EXPOSE 7860
 
 # Run the bot using uv
-# The bot.py will automatically use PORT env var if provided by Render
-CMD ["uv", "run", "bot.py", "--host", "0.0.0.0", "--port", "7860"]
+# Use shell form to interpolate PORT env var (Render provides this)
+# Default to 7860 if PORT is not set (for local development)
+CMD sh -c 'uv run bot.py --host 0.0.0.0 --port ${PORT:-7860}'
