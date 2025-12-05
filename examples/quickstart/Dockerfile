@@ -1,4 +1,16 @@
-FROM dailyco/pipecat-base:latest
+# Use Python 3.11 slim image (compatible with Render's platform)
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv - download standalone binary for Linux x86_64
+RUN curl -LsSf https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz | tar -xz \
+    && mv uv /usr/local/bin/uv \
+    && chmod +x /usr/local/bin/uv
 
 # Enable bytecode compilation
 ENV UV_COMPILE_BYTECODE=1
