@@ -38,6 +38,6 @@ COPY ./pyproject.toml pyproject.toml
 EXPOSE 7860
 
 # Run the bot using uv
-# Use shell form to interpolate PORT env var (Render provides this)
-# Default to 7860 if PORT is not set (for local development)
-CMD sh -c 'uv run bot.py --host 0.0.0.0 --port ${PORT:-7860}'
+# bot.py will automatically detect and use Render's PORT environment variable
+# Use shell form to ensure environment variables are passed through
+CMD sh -c 'uv run bot.py --host 0.0.0.0'
