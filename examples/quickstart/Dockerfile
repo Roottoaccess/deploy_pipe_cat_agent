@@ -35,6 +35,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Copy the application code
 COPY ./main.py main.py
 COPY ./agent.py agent.py
+COPY ./static ./static
 
 # Expose the port the server runs on (default 7860, Render will override with PORT env var)
 EXPOSE 7860

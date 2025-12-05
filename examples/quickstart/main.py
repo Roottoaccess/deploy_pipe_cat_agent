@@ -15,7 +15,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
+from pathlib import Path
 from loguru import logger
 
 # Load environment variables
@@ -77,9 +78,63 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    """Root endpoint - redirects to health check."""
+    """Root endpoint - redirects to client interface."""
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/health")
+    return RedirectResponse(url="/client")
+
+
+@app.get("/client", response_class=HTMLResponse)
+async def client():
+    """Client web interface for connecting to LiveKit agent."""
+    # Try to serve from static directory first
+    static_path = Path(__file__).parent / "static" / "index.html"
+    if static_path.exists():
+        return FileResponse(static_path)
+    
+    # Fallback: return inline HTML
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Pipecat LiveKit Voice Agent</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="https://unpkg.com/livekit-client@latest/dist/livekit-client.umd.js"></script>
+        <style>
+            body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+            button { padding: 15px 30px; font-size: 16px; margin: 10px 0; cursor: pointer; }
+            .status { padding: 15px; margin: 20px 0; border-radius: 5px; }
+            .connected { background: #d4edda; color: #155724; }
+            .disconnected { background: #f8d7da; color: #721c24; }
+        </style>
+    </head>
+    <body>
+        <h1>🎤 Pipecat Voice Agent</h1>
+        <div id="status" class="status disconnected">Disconnected</div>
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+        <script>
+            let room = null;
+            async function connect() {
+                const response = await fetch('/offer', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({room: 'room-' + Date.now()})
+                });
+                const {token, url, room: roomName} = await response.json();
+                room = new LiveKitClient.Room();
+                await room.connect(url, token);
+                document.getElementById('status').textContent = 'Connected';
+                document.getElementById('status').className = 'status connected';
+            }
+            async function disconnect() {
+                if (room) await room.disconnect();
+                document.getElementById('status').textContent = 'Disconnected';
+                document.getElementById('status').className = 'status disconnected';
+            }
+        </script>
+    </body>
+    </html>
+    """
 
 
 @app.get("/health")

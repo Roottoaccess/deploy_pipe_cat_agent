@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pipecat LiveKit Voice Agent</title>
+    <script src="https://unpkg.com/livekit-client@latest/dist/livekit-client.umd.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 500;
+            text-align: center;
+        }
+
+        .status.disconnected {
+            background: #fee;
+            color: #c33;
+        }
+
+        .status.connecting {
+            background: #ffd;
+            color: #996;
+        }
+
+        .status.connected {
+            background: #efe;
+            color: #3c3;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            font-size: 1.1em;
+            font-weight: 600;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+
+        button.connect {
+            background: #667eea;
+            color: white;
+        }
+
+        button.connect:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button.disconnect {
+            background: #e74c3c;
+            color: white;
+        }
+
+        button.disconnect:hover {
+            background: #c0392b;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(231, 76, 60, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .info {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        .info h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .info p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 8px;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .error.show {
+            display: block;
+        }
+
+        .audio-controls {
+            margin-top: 20px;
+        }
+
+        .audio-controls label {
+            display: block;
+            margin-bottom: 10px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Pipecat Voice Agent</h1>
+        <p class="subtitle">Connect to your LiveKit voice AI assistant</p>
+
+        <div id="status" class="status disconnected">Disconnected</div>
+
+        <div class="audio-controls">
+            <label for="audioInput">Microphone:</label>
+            <select id="audioInput"></select>
+        </div>
+
+        <button id="connectBtn" class="connect" onclick="connect()">Connect</button>
+        <button id="disconnectBtn" class="disconnect" onclick="disconnect()" style="display: none;">Disconnect</button>
+
+        <div class="error" id="error"></div>
+
+        <div class="info">
+            <h3>ℹ️ How to use</h3>
+            <p>1. Select your microphone from the dropdown</p>
+            <p>2. Click "Connect" to start the voice session</p>
+            <p>3. Speak naturally - the AI will respond</p>
+            <p>4. Click "Disconnect" when done</p>
+        </div>
+    </div>
+
+    <script>
+        let room = null;
+        let localParticipant = null;
+        let audioTrack = null;
+
+        // Get server URL (same origin)
+        const serverUrl = window.location.origin;
+
+        // Load audio devices
+        async function loadAudioDevices() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const audioInputs = devices.filter(device => device.kind === 'audioinput');
+                
+                const select = document.getElementById('audioInput');
+                select.innerHTML = '';
+                
+                audioInputs.forEach(device => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    option.textContent = device.label || `Microphone ${select.options.length + 1}`;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading audio devices:', error);
+            }
+        }
+
+        // Request microphone permission and load devices
+        async function requestMicrophonePermission() {
+            try {
+                await navigator.mediaDevices.getUserMedia({ audio: true });
+                await loadAudioDevices();
+            } catch (error) {
+                showError('Microphone permission denied. Please allow microphone access.');
+            }
+        }
+
+        // Show error message
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.classList.add('show');
+            setTimeout(() => {
+                errorDiv.classList.remove('show');
+            }, 5000);
+        }
+
+        // Update status
+        function updateStatus(status, text) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${status}`;
+            statusDiv.textContent = text;
+        }
+
+        // Connect to LiveKit room
+        async function connect() {
+            try {
+                updateStatus('connecting', 'Connecting...');
+                document.getElementById('connectBtn').disabled = true;
+
+                // Generate a unique room name
+                const roomName = `room-${Date.now()}`;
+
+                // Get LiveKit token from server
+                const response = await fetch(`${serverUrl}/offer`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ room: roomName }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to get LiveKit token');
+                }
+
+                const data = await response.json();
+                const { token, url, room } = data;
+
+                // Get selected audio device
+                const audioInputId = document.getElementById('audioInput').value;
+
+                // Create LiveKit room
+                room = new LiveKitClient.Room({
+                    adaptiveStream: true,
+                    dynacast: true,
+                });
+
+                // Set up event handlers
+                room.on('connected', () => {
+                    updateStatus('connected', 'Connected - Speak now!');
+                    document.getElementById('connectBtn').style.display = 'none';
+                    document.getElementById('disconnectBtn').style.display = 'block';
+                });
+
+                room.on('disconnected', () => {
+                    updateStatus('disconnected', 'Disconnected');
+                    document.getElementById('connectBtn').style.display = 'block';
+                    document.getElementById('disconnectBtn').style.display = 'none';
+                    document.getElementById('connectBtn').disabled = false;
+                });
+
+                room.on('trackSubscribed', (track, publication, participant) => {
+                    if (track.kind === 'audio' && participant !== room.localParticipant) {
+                        // Play remote audio
+                        const audioElement = new Audio();
+                        track.attach(audioElement);
+                        audioElement.play();
+                    }
+                });
+
+                // Connect to room
+                await room.connect(url, token);
+
+                // Get user media with selected device
+                const constraints = {
+                    audio: {
+                        deviceId: audioInputId ? { exact: audioInputId } : undefined,
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                    },
+                };
+
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                audioTrack = LiveKitClient.createLocalAudioTrack(stream.getAudioTracks()[0]);
+
+                // Publish audio track
+                await room.localParticipant.publishTrack(audioTrack);
+
+                // Start agent
+                await fetch(`${serverUrl}/agent`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ room: roomName }),
+                });
+
+            } catch (error) {
+                console.error('Connection error:', error);
+                showError(`Connection failed: ${error.message}`);
+                updateStatus('disconnected', 'Connection failed');
+                document.getElementById('connectBtn').disabled = false;
+            }
+        }
+
+        // Disconnect from room
+        async function disconnect() {
+            try {
+                if (audioTrack) {
+                    audioTrack.stop();
+                    audioTrack = null;
+                }
+
+                if (room) {
+                    await room.disconnect();
+                    room = null;
+                }
+
+                updateStatus('disconnected', 'Disconnected');
+                document.getElementById('connectBtn').style.display = 'block';
+                document.getElementById('disconnectBtn').style.display = 'none';
+                document.getElementById('connectBtn').disabled = false;
+            } catch (error) {
+                console.error('Disconnect error:', error);
+                showError(`Disconnect failed: ${error.message}`);
+            }
+        }
+
+        // Initialize on page load
+        window.addEventListener('load', () => {
+            requestMicrophonePermission();
+        });
+    </script>
+</body>
+</html>
+
