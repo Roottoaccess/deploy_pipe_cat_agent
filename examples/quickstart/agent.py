@@ -20,6 +20,7 @@ from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
+from pipecat.processors.frameworks.rtvi import RTVIConfig, RTVIObserver, RTVIProcessor
 from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.openai.llm import OpenAILLMService
@@ -97,10 +98,14 @@ class VoiceAgent:
             context = LLMContext(messages)
             context_aggregator = LLMContextAggregatorPair(context)
 
-            # Create pipeline
+            # Add RTVI processor (from bot.py)
+            rtvi = RTVIProcessor(config=RTVIConfig(config=[]))
+
+            # Create pipeline (matching bot.py structure)
             pipeline = Pipeline(
                 [
                     self.transport.input(),  # Transport user input
+                    rtvi,  # RTVI processor
                     stt,  # Speech-to-text
                     context_aggregator.user(),  # User responses
                     llm,  # LLM
@@ -110,13 +115,14 @@ class VoiceAgent:
                 ]
             )
 
-            # Create task
+            # Create task (matching bot.py structure)
             self.task = PipelineTask(
                 pipeline,
                 params=PipelineParams(
                     enable_metrics=True,
                     enable_usage_metrics=True,
                 ),
+                observers=[RTVIObserver(rtvi)],
             )
 
             # Set up event handlers

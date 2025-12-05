@@ -2,9 +2,11 @@
 FROM python:3.11-slim
 
 # Install system dependencies (minimal - no OpenGL needed for LiveKit)
+# Add ffmpeg for audio processing (fixes pydub warning)
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv - download and extract, find binary regardless of directory structure

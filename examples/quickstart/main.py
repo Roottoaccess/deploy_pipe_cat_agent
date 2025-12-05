@@ -9,9 +9,14 @@ No UDP required - all communication goes through LiveKit's cloud infrastructure.
 import asyncio
 import os
 import sys
+import warnings
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
+
+# Suppress harmless warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="pydub")
+os.environ.setdefault("ONNXRUNTIME_DEVICE_DISCOVERY", "0")  # Disable GPU discovery
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
