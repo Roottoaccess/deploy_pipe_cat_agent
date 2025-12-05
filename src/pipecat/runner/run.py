@@ -290,7 +290,7 @@ def _setup_webrtc_routes(
         # Parse the request body
         try:
             request_data = await request.json()
-            logger.debug(f"Received request: {request_data}")
+            logger.debug(f"Received /start request: {request_data}")
         except Exception as e:
             logger.error(f"Failed to parse request body: {e}")
             request_data = {}
@@ -298,6 +298,7 @@ def _setup_webrtc_routes(
         # Store session info immediately in memory, replicate the behavior expected on Pipecat Cloud
         session_id = str(uuid.uuid4())
         active_sessions[session_id] = request_data
+        logger.info(f"Created session {session_id}, total active sessions: {len(active_sessions)}")
 
         result: StartBotResult = {"sessionId": session_id}
         if request_data.get("enableDefaultIceServers"):
@@ -316,7 +317,14 @@ def _setup_webrtc_routes(
     ):
         """Mimic Pipecat Cloud's proxy."""
         active_session = active_sessions.get(session_id)
-        if active_session is None:
+        
+        # Auto-create session for offer requests if it doesn't exist
+        # This makes the system more resilient to timing issues
+        if path.endswith("api/offer") and active_session is None:
+            logger.warning(f"Session {session_id} not found, auto-creating for offer request")
+            active_sessions[session_id] = {"auto_created": True}
+            active_session = active_sessions[session_id]
+        elif active_session is None:
             return Response(content="Invalid or not-yet-ready session_id", status_code=404)
 
         if path.endswith("api/offer"):
@@ -339,9 +347,15 @@ def _setup_webrtc_routes(
                         candidates=[IceCandidate(**c) for c in request_data.get("candidates", [])],
                     )
                     return await ice_candidate(patch_request)
+            except KeyError as e:
+                logger.error(f"Missing required field in WebRTC request: {e}")
+                return Response(content=f"Missing required field: {e}", status_code=400)
+            except ValueError as e:
+                logger.error(f"Invalid JSON in WebRTC request: {e}")
+                return Response(content=f"Invalid JSON: {e}", status_code=400)
             except Exception as e:
-                logger.error(f"Failed to parse WebRTC request: {e}")
-                return Response(content="Invalid WebRTC request", status_code=400)
+                logger.error(f"Failed to parse WebRTC request: {e}", exc_info=True)
+                return Response(content=f"Invalid WebRTC request: {str(e)}", status_code=400)
 
         logger.info(f"Received request for path: {path}")
         return Response(status_code=200)
